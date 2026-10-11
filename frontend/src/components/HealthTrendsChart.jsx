@@ -10,18 +10,35 @@ export function HealthTrendsChart({
   onSelectDateFilter
 }) {
   const [calendarDate, setCalendarDate] = useState(new Date());
-  const [selectedDay, setSelectedDay] = useState(new Date().getDate());
-  const now = new Date();
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [today] = useState(() => new Date());
   const currentMonthYear = calendarDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+  const applyCalendarDate = (nextDate) => {
+    setCalendarDate(nextDate);
+    const isCurrentMonth =
+      nextDate.getFullYear() === today.getFullYear() &&
+      nextDate.getMonth() === today.getMonth();
+    setSelectedDate(
+      isCurrentMonth
+        ? new Date(today)
+        : new Date(nextDate.getFullYear(), nextDate.getMonth(), 1)
+    );
+  };
+
   const handlePrevMonth = () => {
-    setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1));
+    applyCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1));
   };
 
   const handleNextMonth = () => {
-    setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1));
+    applyCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1));
   };
+
+  const isSelected = (year, month, day) =>
+    selectedDate.getFullYear() === year &&
+    selectedDate.getMonth() === month &&
+    selectedDate.getDate() === day;
 
   // Calculate dynamic metrics from actual application data
   const metrics = useMemo(() => {
@@ -45,33 +62,53 @@ export function HealthTrendsChart({
     return { doseText, symptomText, integrityText };
   }, [symptoms, symptomsCount, medEventsCount]);
 
+  // Set of local calendar dates that actually contain logged health records
+  const eventDateKeys = useMemo(() => {
+    const keys = new Set();
+    const addKey = (value) => {
+      if (!value) return;
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return;
+      keys.add(`${parsed.getFullYear()}-${parsed.getMonth()}-${parsed.getDate()}`);
+    };
+    symptoms.forEach((s) => addKey(s.logged_at || s.onset_time));
+    medEvents.forEach((m) => addKey(m.taken_at));
+    return keys;
+  }, [symptoms, medEvents]);
+
   // Calendar dates generation dynamically computed for calendarDate
   const calendarCells = useMemo(() => {
     const year = calendarDate.getFullYear();
     const month = calendarDate.getMonth();
-    const isCurrentActualMonth = year === now.getFullYear() && month === now.getMonth();
-    const actualToday = now.getDate();
+    const isCurrentActualMonth = year === today.getFullYear() && month === today.getMonth();
+    const actualToday = today.getDate();
 
     const firstDayIndex = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const prevMonthDays = new Date(year, month, 0).getDate();
 
     const cells = [];
-    // Previous month padding
+    // Leading padding from the previous month to align the first weekday
     for (let i = firstDayIndex - 1; i >= 0; i--) {
-      cells.push({ day: prevMonthDays - i, isCurrentMonth: false, isToday: false });
+      cells.push({ day: prevMonthDays - i, isCurrentMonth: false, isToday: false, hasEvent: false });
     }
-    // Current month days
+    // Every day of the displayed month (never truncated)
     for (let d = 1; d <= daysInMonth; d++) {
       cells.push({
         day: d,
         isCurrentMonth: true,
         isToday: isCurrentActualMonth && d === actualToday,
-        hasEvent: (d + month) % 4 === 0 || d === actualToday
+        hasEvent: eventDateKeys.has(`${year}-${month}-${d}`)
       });
     }
-    return cells.slice(0, 28); // 4 weeks grid
-  }, [calendarDate, now]);
+    // Trailing padding from the next month to complete the final week
+    let trailingDay = 1;
+    while (cells.length % 7 !== 0) {
+      cells.push({ day: trailingDay, isCurrentMonth: false, isToday: false, hasEvent: false });
+      trailingDay += 1;
+    }
+    return cells;
+  }, [calendarDate, today, eventDateKeys]);
 
   // Dynamic Chart Points derived from real data
   const chartPoints = useMemo(() => {
@@ -258,11 +295,11 @@ export function HealthTrendsChart({
               key={idx}
               onClick={() => {
                 if (c.isCurrentMonth) {
-                  setSelectedDay(c.day);
+                  setSelectedDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth(), c.day));
                   if (onSelectDateFilter) onSelectDateFilter(c.day);
                 }
               }}
-              className={`cal-day-num ${!c.isCurrentMonth ? 'muted-day' : ''} ${c.isToday ? 'today-day' : ''} ${c.hasEvent && !c.isToday ? 'event-day' : ''} ${selectedDay === c.day && c.isCurrentMonth ? 'selected-day' : ''}`}
+              className={`cal-day-num ${!c.isCurrentMonth ? 'muted-day' : ''} ${c.isToday ? 'today-day' : ''} ${c.hasEvent && !c.isToday ? 'event-day' : ''} ${c.isCurrentMonth && !c.isToday && isSelected(calendarDate.getFullYear(), calendarDate.getMonth(), c.day) ? 'selected-day' : ''}`}
               style={{ background: 'none', border: 'none', cursor: c.isCurrentMonth ? 'pointer' : 'default' }}
             >
               {c.day}
@@ -273,7 +310,7 @@ export function HealthTrendsChart({
         {/* Today's Actual Cached Regimen Slots */}
         <div className="calendar-schedule-list">
           <div className="cal-schedule-title">
-            Today's Regimen Slots (Day {selectedDay})
+            Today's Regimen Slots (Day {selectedDate.getDate()})
           </div>
           <div className="cal-schedule-items">
             {schedules.length === 0 ? (

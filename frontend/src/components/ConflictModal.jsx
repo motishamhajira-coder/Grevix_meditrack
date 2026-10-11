@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Check, X, ArrowRight, ShieldAlert } from 'lucide-react';
 
 export function EditScheduleModal({
@@ -7,12 +7,21 @@ export function EditScheduleModal({
   onClose,
   onSave
 }) {
-  if (!isOpen || !schedule) return null;
+  const [name, setName] = useState(schedule ? schedule.medication_name : '');
+  const [dosage, setDosage] = useState(schedule ? schedule.dosage : '');
+  const [frequency, setFrequency] = useState(schedule ? schedule.frequency : '');
+  const [instructions, setInstructions] = useState(schedule ? schedule.instructions || '' : '');
 
-  const [name, setName] = useState(schedule.medication_name);
-  const [dosage, setDosage] = useState(schedule.dosage);
-  const [frequency, setFrequency] = useState(schedule.frequency);
-  const [instructions, setInstructions] = useState(schedule.instructions || '');
+  useEffect(() => {
+    if (schedule) {
+      setName(schedule.medication_name);
+      setDosage(schedule.dosage);
+      setFrequency(schedule.frequency);
+      setInstructions(schedule.instructions || '');
+    }
+  }, [schedule]);
+
+  if (!isOpen || !schedule) return null;
 
   const handleSubmit = (e) => {
     e.preventDefault();

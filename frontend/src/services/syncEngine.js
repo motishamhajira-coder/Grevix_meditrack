@@ -18,10 +18,29 @@ import {
 } from './db';
 
 const API_BASE_URL = 'http://127.0.0.1:8000';
+const SIMULATED_OFFLINE_KEY = 'meditrack_simulated_offline';
+
+function readSimulatedOfflineFlag() {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem(SIMULATED_OFFLINE_KEY) === 'true';
+  } catch (e) {
+    return false;
+  }
+}
+
+function persistSimulatedOfflineFlag(value) {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(SIMULATED_OFFLINE_KEY, value ? 'true' : 'false');
+    }
+  } catch (e) {
+    // Storage may be unavailable (private mode); simulated mode simply won't survive a reload
+  }
+}
 
 class SyncEngine {
   constructor() {
-    this.isSimulatedOffline = false;
+    this.isSimulatedOffline = readSimulatedOfflineFlag();
     this.isOnline = (typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean')
       ? navigator.onLine
       : true;
@@ -69,6 +88,7 @@ class SyncEngine {
 
   setSimulatedOffline(simulated) {
     this.isSimulatedOffline = !!simulated;
+    persistSimulatedOfflineFlag(this.isSimulatedOffline);
     this.notifySubscribers({
       event: 'simulated_offline_change',
       simulated: this.isSimulatedOffline,
